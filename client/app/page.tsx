@@ -10,25 +10,34 @@ interface Connection {
   disabled: boolean;
 }
 
+function getErrorMessage(e: unknown): string {
+  if (typeof e === 'object' && e !== null) {
+    // For axios error structure
+    if ('response' in e) {
+      const errResp = (e as any).response;
+      if (errResp && errResp.data && typeof errResp.data.error === 'string') {
+        return errResp.data.error;
+      }
+    }
+    if ('message' in e && typeof (e as any).message === 'string') {
+      return (e as any).message;
+    }
+  }
+  return 'Unknown error occurred';
+}
+
 export default function HomePage() {
-  // User credentials input by user
   const [userId, setUserId] = useState('');
   const [userSecret, setUserSecret] = useState('');
-
-  // Connect broker form inputs and states
   const [brokerInput, setBrokerInput] = useState('');
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectMessage, setConnectMessage] = useState('');
-
-  // Connections list
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [connectionsError, setConnectionsError] = useState('');
-
-  // Flag to determine if we should fetch connections
   const [credentialsSubmitted, setCredentialsSubmitted] = useState(false);
 
-  // On mount, try to load credentials from localStorage and pre-fill inputs
+  // On mount, try to load credentials
   useEffect(() => {
     const storedUserId = localStorage.getItem('snaptrade_userId');
     const storedUserSecret = localStorage.getItem('snaptrade_userSecret');
@@ -39,7 +48,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // Fetch connections after userId and userSecret provided
+  // Fetch connections after credentials submitted
   useEffect(() => {
     if (credentialsSubmitted && userId && userSecret) {
       fetchConnections(userId, userSecret);
@@ -50,14 +59,17 @@ export default function HomePage() {
     setLoadingConnections(true);
     setConnectionsError('');
     try {
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/get-connections', {
-        userId: uid,
-        userSecret: secret,
-      });
+      const res = await axios.post<{ connections: Connection[] }>(
+        'https://snaptrade-trial.onrender.com/api/snaptrade/get-connections',
+        {
+          userId: uid,
+          userSecret: secret,
+        }
+      );
       setConnections(res.data.connections || []);
       setConnectionsError('');
-    } catch (e: any) {
-      setConnectionsError(e.response?.data?.error || 'Failed to load connections');
+    } catch (e: unknown) {
+      setConnectionsError(getErrorMessage(e) || 'Failed to load connections');
     } finally {
       setLoadingConnections(false);
     }
@@ -72,31 +84,28 @@ export default function HomePage() {
     setConnectLoading(true);
     setConnectMessage('');
     try {
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/connect-broker', {
+      const res = await axios.post<{
+        connectionStatus?: { redirectURI?: string };
+        userSecret?: string;
+      }>('https://snaptrade-trial.onrender.com/api/snaptrade/connect-broker', {
         userId,
         userSecret,
         broker: brokerInput.toUpperCase(),
       });
       const { connectionStatus, userSecret: newUserSecret } = res.data;
-
-      // If new userSecret is provided by API, update state and persist it
       if (newUserSecret && newUserSecret !== userSecret) {
         setUserSecret(newUserSecret);
         localStorage.setItem('snaptrade_userSecret', newUserSecret);
       }
-
       if (connectionStatus?.redirectURI) {
         setConnectMessage('Redirecting to broker authorization...');
         window.location.href = connectionStatus.redirectURI;
         return;
       }
-
       setConnectMessage('Broker connection initiated successfully.');
-
-      // Reload connections with updated secret if any
       fetchConnections(userId, newUserSecret || userSecret);
-    } catch (err: any) {
-      setConnectMessage(err.response?.data?.error || 'Error connecting broker');
+    } catch (e: unknown) {
+      setConnectMessage(getErrorMessage(e) || 'Error connecting broker');
     } finally {
       setConnectLoading(false);
     }
@@ -108,18 +117,14 @@ export default function HomePage() {
       alert('Please enter both User ID and User Secret');
       return;
     }
-    // Save credentials to localStorage
     localStorage.setItem('snaptrade_userId', userId.trim());
     localStorage.setItem('snaptrade_userSecret', userSecret.trim());
-
     setCredentialsSubmitted(true);
   };
 
   return (
     <main className="max-w-3xl mx-auto p-6 space-y-10">
       <h1 className="text-3xl font-bold mb-6 text-center">SnapTrade Dashboard</h1>
-
-      {/* Enter User Credentials */}
       {!credentialsSubmitted && (
         <section className="max-w-md mx-auto">
           <h2 className="text-xl font-semibold mb-4">Enter SnapTrade Credentials</h2>
@@ -150,10 +155,8 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Main Content after credentials */}
       {credentialsSubmitted && (
         <>
-          {/* Connect Broker Form */}
           <section>
             <h2 className="text-xl font-semibold mb-4">Connect a New Broker</h2>
             <form onSubmit={handleConnectBroker} className="space-y-4 max-w-md mx-auto">
@@ -177,7 +180,6 @@ export default function HomePage() {
             {connectMessage && <p className="mt-3 text-center text-gray-700">{connectMessage}</p>}
           </section>
 
-          {/* Connections List */}
           <section>
             <h2 className="text-xl font-semibold mb-4">Your Connected Brokerages</h2>
             {loadingConnections && <p>Loading connected brokerages...</p>}
@@ -193,7 +195,6 @@ export default function HomePage() {
                 >
                   <div className="flex items-center space-x-4">
                     {conn.logoUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={conn.logoUrl}
                         alt={conn.brokerName}

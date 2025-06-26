@@ -60,6 +60,38 @@ interface Transaction {
   institution: string;
 }
 
+interface OrderImpactResponse {
+  data: {
+    trade: { id: string };
+    trade_impacts?: Array<{ remaining_cash?: number }>;
+  };
+}
+
+interface PlaceOrderResponse {
+  data: { brokerage_order_id: string };
+}
+
+interface CancelOrderResponse {
+  data: { status: string };
+}
+
+type OrderResponse = OrderImpactResponse | PlaceOrderResponse | CancelOrderResponse;
+
+function getErrorMessage(e: unknown): string {
+  if (typeof e === 'object' && e !== null) {
+    if ('response' in e) {
+      const errResp = (e as any).response;
+      if (errResp && errResp.data && typeof errResp.data.error === 'string') {
+        return errResp.data.error;
+      }
+    }
+    if ('message' in e && typeof (e as any).message === 'string') {
+      return (e as any).message;
+    }
+  }
+  return 'Unknown error occurred';
+}
+
 export default function BrokerPage() {
   const params = useParams();
   const router = useRouter();
@@ -74,18 +106,31 @@ export default function BrokerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [tradeId, setTradeId] = useState<string>('');
-  const [lastOrderResponse, setLastOrderResponse] = useState<any>(null);
+  const [lastOrderResponse, setLastOrderResponse] = useState<OrderResponse | null>(null);
 
-  // Symbol Search states
+  // Symbol search states and types
+  interface SymbolResult {
+    symbol: string;
+    description: string;
+    universal_symbol_id: string;
+  }
   const [symbolSearchTerm, setSymbolSearchTerm] = useState('');
-  const [symbolResults, setSymbolResults] = useState<
-    { symbol: string; description: string; universal_symbol_id: string }[]
-  >([]);
+  const [symbolResults, setSymbolResults] = useState<SymbolResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
 
-  // Form fields for order impact check and order placement
-  const [orderForm, setOrderForm] = useState({
+  // orderForm type:
+  interface OrderForm {
+    action: 'BUY' | 'SELL';
+    universal_symbol_id: string;
+    order_type: 'Market' | 'Limit' | 'Stop' | 'StopLimit';
+    time_in_force: 'Day' | 'GTC' | 'FOK' | 'IOC';
+    units: number | '';
+    price: number | string;
+    stop: number | string;
+    notional_value: number | string;
+  }
+  const [orderForm, setOrderForm] = useState<OrderForm>({
     action: 'BUY',
     universal_symbol_id: '',
     order_type: 'Market',
@@ -96,10 +141,7 @@ export default function BrokerPage() {
     notional_value: '' as string | number,
   });
 
-  // Fields for place checked order
   const [placeCheckedWaitConfirm, setPlaceCheckedWaitConfirm] = useState(true);
-
-  // Cancel order
   const [cancelBrokerageOrderId, setCancelBrokerageOrderId] = useState('');
 
   // Load credentials from localStorage on mount
@@ -115,7 +157,7 @@ export default function BrokerPage() {
     setUserSecret(storedUserSecret);
   }, [router]);
 
-  // Fetch accounts once userId and userSecret set
+  // Fetch accounts once userId and secret available
   useEffect(() => {
     if (userId && userSecret) {
       fetchAccounts();
@@ -125,105 +167,114 @@ export default function BrokerPage() {
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/get-accounts', {
-        userId,
-        userSecret,
-      });
+      const res = await axios.post<{ accounts: Account[] }>(
+        'https://snaptrade-trial.onrender.com/api/snaptrade/get-accounts',
+        {
+          userId,
+          userSecret,
+        }
+      );
       const accountsData: Account[] = res.data.accounts || [];
       setAccounts(accountsData);
-      if (accountsData.length > 0) {
-        setSelectedAccountId(accountsData[0].id);
-      } else {
-        setSelectedAccountId('');
-      }
+      setSelectedAccountId(accountsData.length > 0 ? accountsData[0].id : '');
       setError('');
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Failed to load accounts');
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Failed to load accounts');
       setSelectedAccountId('');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch holdings for selected account
   const fetchHoldings = async () => {
-    if (!selectedAccountId) return alert('Select an account');
+    if (!selectedAccountId) {
+      alert('Select an account');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/get-account-holdings', {
-        userId,
-        userSecret,
-        accountId: selectedAccountId,
-      });
+      const res = await axios.post<Holding>(
+        'https://snaptrade-trial.onrender.com/api/snaptrade/get-account-holdings',
+        {
+          userId,
+          userSecret,
+          accountId: selectedAccountId,
+        }
+      );
       setHoldings(res.data);
       setError('');
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Failed to load holdings');
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Failed to load holdings');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch transactions for selected account
   const fetchTransactions = async () => {
-    if (!selectedAccountId) return alert('Select an account');
+    if (!selectedAccountId) {
+      alert('Select an account');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/get-transactions', {
-        userId,
-        userSecret,
-        accountId: selectedAccountId,
-        startDate: '2023-01-01',
-        endDate: '2025-06-24',
-      });
+      const res = await axios.post<{ transactions: Transaction[] }>(
+        'https://snaptrade-trial.onrender.com/api/snaptrade/get-transactions',
+        {
+          userId,
+          userSecret,
+          accountId: selectedAccountId,
+          startDate: '2023-01-01',
+          endDate: '2025-06-24',
+        }
+      );
       setTransactions(res.data.transactions);
       setError('');
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Failed to load transactions');
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Failed to load transactions');
     } finally {
       setLoading(false);
     }
   };
 
-  // Symbol search effect: debounce + API call
+  // Symbol search effect with debounce
   useEffect(() => {
     if (symbolSearchTerm.length < 2) {
       setSymbolResults([]);
       setSearchError('');
       return;
     }
-
     if (!selectedAccountId) {
       setSearchError('Select an account before searching symbols');
       setSymbolResults([]);
       return;
     }
-
     if (!userId || !userSecret) {
       setSearchError('Missing user credentials');
       setSymbolResults([]);
       return;
     }
-
     const handler = setTimeout(async () => {
       setSearchLoading(true);
       setSearchError('');
       try {
-        const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/search-acc-symbols', {
-          userId,
-          userSecret,
-          accountId: selectedAccountId,
-          substring: symbolSearchTerm,
-        });
+        const res = await axios.post<{ symbols: Array<{ symbol: string; description?: string; name?: string; id: string }> }>(
+          'https://snaptrade-trial.onrender.com/api/snaptrade/search-acc-symbols',
+          {
+            userId,
+            userSecret,
+            accountId: selectedAccountId,
+            substring: symbolSearchTerm,
+          }
+        );
         const symbols = res.data.symbols || [];
-        const formattedSymbols = symbols.map((sym: any) => ({
+        const formattedSymbols: SymbolResult[] = symbols.map((sym) => ({
           symbol: sym.symbol,
           description: sym.description || sym.name || '',
           universal_symbol_id: sym.id,
         }));
         setSymbolResults(formattedSymbols);
-      } catch (err: any) {
-        setSearchError(err.response?.data?.error || 'Failed to search symbols');
+      } catch (e: unknown) {
+        setSearchError(getErrorMessage(e) || 'Failed to search symbols');
         setSymbolResults([]);
       } finally {
         setSearchLoading(false);
@@ -248,7 +299,10 @@ export default function BrokerPage() {
 
   const checkOrderImpact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAccountId) return alert('Select an account');
+    if (!selectedAccountId) {
+      alert('Select an account');
+      return;
+    }
     try {
       const payload = {
         userId,
@@ -263,37 +317,49 @@ export default function BrokerPage() {
         units: orderForm.units,
         notional_value: orderForm.notional_value === '' ? undefined : orderForm.notional_value,
       };
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/impact', payload);
+      const res = await axios.post<OrderImpactResponse>(
+        'https://snaptrade-trial.onrender.com/api/snaptrade/impact',
+        payload
+      );
       alert(
         `Order Impact Check Successful\nTrade ID: ${res.data.data.trade.id}\nRemaining Cash: ${res.data.data.trade_impacts?.[0]?.remaining_cash}`
       );
       setTradeId(res.data.data.trade.id);
-      setLastOrderResponse(res.data.data);
-    } catch (e: any) {
-      alert('Failed to check order impact:' + (e.response?.data?.error || e.message));
+      setLastOrderResponse(res.data);
+    } catch (e: unknown) {
+      alert('Failed to check order impact: ' + getErrorMessage(e));
     }
   };
 
   const placeCheckedOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tradeId) return alert('No tradeId. Please check order impact first.');
+    if (!tradeId) {
+      alert('No tradeId. Please check order impact first.');
+      return;
+    }
     try {
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/place-checked-order', {
-        userId,
-        userSecret,
-        tradeId,
-        wait_to_confirm: placeCheckedWaitConfirm,
-      });
+      const res = await axios.post<PlaceOrderResponse>(
+        'https://snaptrade-trial.onrender.com/api/snaptrade/place-checked-order',
+        {
+          userId,
+          userSecret,
+          tradeId,
+          wait_to_confirm: placeCheckedWaitConfirm,
+        }
+      );
       alert('Order placed successfully. Brokerage Order ID: ' + res.data.data.brokerage_order_id);
-      setLastOrderResponse(res.data.data);
-    } catch (e: any) {
-      alert('Failed to place checked order: ' + (e.response?.data?.error || e.message));
+      setLastOrderResponse(res.data);
+    } catch (e: unknown) {
+      alert('Failed to place checked order: ' + getErrorMessage(e));
     }
   };
 
   const placeOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAccountId) return alert('Select an account');
+    if (!selectedAccountId) {
+      alert('Select an account');
+      return;
+    }
     try {
       const payload = {
         userId,
@@ -309,29 +375,41 @@ export default function BrokerPage() {
         units: orderForm.units,
         notional_value: orderForm.notional_value === '' ? undefined : orderForm.notional_value,
       };
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/place-order', payload);
+      const res = await axios.post<PlaceOrderResponse>(
+        'https://snaptrade-trial.onrender.com/api/snaptrade/place-order',
+        payload
+      );
       alert('Force order placed successfully. Brokerage Order ID: ' + res.data.data.brokerage_order_id);
-      setLastOrderResponse(res.data.data);
-    } catch (e: any) {
-      alert('Failed to place order: ' + (e.response?.data?.error || e.message));
+      setLastOrderResponse(res.data);
+    } catch (e: unknown) {
+      alert('Failed to place order: ' + getErrorMessage(e));
     }
   };
 
   const cancelOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAccountId) return alert('Select an account');
-    if (!cancelBrokerageOrderId.trim()) return alert('Enter brokerage order ID to cancel');
+    if (!selectedAccountId) {
+      alert('Select an account');
+      return;
+    }
+    if (!cancelBrokerageOrderId.trim()) {
+      alert('Enter brokerage order ID to cancel');
+      return;
+    }
     try {
-      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/cancel-order', {
-        userId,
-        userSecret,
-        accountId: selectedAccountId,
-        brokerage_order_id: cancelBrokerageOrderId.trim(),
-      });
+      const res = await axios.post<CancelOrderResponse>(
+        'https://snaptrade-trial.onrender.com/api/snaptrade/cancel-order',
+        {
+          userId,
+          userSecret,
+          accountId: selectedAccountId,
+          brokerage_order_id: cancelBrokerageOrderId.trim(),
+        }
+      );
       alert('Cancel request sent. Status: ' + res.data.data.status);
-      setLastOrderResponse(res.data.data);
-    } catch (e: any) {
-      alert('Failed to cancel order: ' + (e.response?.data?.error || e.message));
+      setLastOrderResponse(res.data);
+    } catch (e: unknown) {
+      alert('Failed to cancel order: ' + getErrorMessage(e));
     }
   };
 
@@ -348,7 +426,6 @@ export default function BrokerPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <h1 className="text-3xl font-semibold mb-4">Brokerage Details</h1>
-
       {/* Accounts Select */}
       <div>
         <label htmlFor="accountSelect" className="font-semibold">
@@ -362,7 +439,6 @@ export default function BrokerPage() {
         >
           <option value="">-- Select Account --</option>
           {accounts.map((acc) => (
-            // Use account.id as key (must be unique)
             <option key={acc.id} value={acc.id}>
               {acc.name} ({acc.institutionName}) - {formatBalance(acc.balance)}
             </option>
@@ -397,7 +473,6 @@ export default function BrokerPage() {
             <h3 className="font-semibold">Positions</h3>
             <ul>
               {holdings.positions.map((pos, idx) => (
-                // use pos.symbol + idx as key to ensure uniqueness (if symbol unique just symbol)
                 <li key={`${pos.symbol}-${idx}`} className="border-b py-1">
                   <strong>{pos.symbol}</strong>: {pos.description} — Units: {pos.units}, Price:{' '}
                   {pos.price}, Market Value: {pos.marketValue.toFixed(2)}
@@ -409,7 +484,6 @@ export default function BrokerPage() {
             <h3 className="font-semibold">Option Positions</h3>
             <ul>
               {holdings.optionPositions.map((opt, idx) => (
-                // Use ticker + idx as key (or if you have a unique id, better)
                 <li key={`${opt.ticker}-${idx}`} className="border-b py-1">
                   <strong>{opt.ticker}</strong> ({opt.optionType}) Strike: {opt.strikePrice},{' '}
                   Expiry: {new Date(opt.expirationDate).toLocaleDateString()}, Units: {opt.units},{' '}
@@ -427,7 +501,6 @@ export default function BrokerPage() {
           <h2 className="text-xl font-semibold mb-2">Transactions</h2>
           <ul>
             {transactions.map((tx) => (
-              // Use transaction ID as key (should be unique)
               <li key={tx.id} className="border-b py-1">
                 <strong>{tx.description}</strong> ({tx.type}) — Symbol: {tx.symbol} — Amount:{' '}
                 {tx.amount} {tx.currency} — Trade Date:{' '}
