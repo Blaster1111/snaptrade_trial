@@ -1,4 +1,5 @@
 'use client';
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -66,27 +67,24 @@ interface OrderImpactResponse {
     trade_impacts?: Array<{ remaining_cash?: number }>;
   };
 }
-
 interface PlaceOrderResponse {
   data: { brokerage_order_id: string };
 }
-
 interface CancelOrderResponse {
   data: { status: string };
 }
-
 type OrderResponse = OrderImpactResponse | PlaceOrderResponse | CancelOrderResponse;
 
 function getErrorMessage(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
     if ('response' in e) {
-      const errResp = (e as any).response;
-      if (errResp && errResp.data && typeof errResp.data.error === 'string') {
-        return errResp.data.error;
+      const res = (e as { response?: { data?: { error?: string } } }).response;
+      if (res?.data?.error) {
+        return res.data.error;
       }
     }
-    if ('message' in e && typeof (e as any).message === 'string') {
-      return (e as any).message;
+    if ('message' in e && typeof (e as { message?: string }).message === 'string') {
+      return (e as { message: string }).message;
     }
   }
   return 'Unknown error occurred';
@@ -95,20 +93,18 @@ function getErrorMessage(e: unknown): string {
 export default function BrokerPage() {
   const params = useParams();
   const router = useRouter();
-  // connectionId is received but currently not used. We leave it here if you need for future extension.
+  // Currently unused, but retained for future use
+  // If strictly unused and you want to remove the variable, uncomment the next line and remove `connectionId` below:
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const connectionId = params?.connectionId || '';
 
-  const [userId, setUserId] = useState<string>('');
-  const [userSecret, setUserSecret] = useState<string>('');
+  const [userId, setUserId] = useState('');
+  const [userSecret, setUserSecret] = useState('');
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+  const [selectedAccountId, setSelectedAccountId] = useState('');
   const [holdings, setHoldings] = useState<Holding | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  // No longer needed - you can remove error and loading states if unused elsewhere
-  // const [loading, setLoading] = useState(false);
-  // const [error, setError] = useState('');
-
-  const [tradeId, setTradeId] = useState<string>('');
+  const [tradeId, setTradeId] = useState('');
   const [lastOrderResponse, setLastOrderResponse] = useState<OrderResponse | null>(null);
 
   interface SymbolResult {
@@ -139,15 +135,15 @@ export default function BrokerPage() {
     order_type: 'Market',
     time_in_force: 'Day',
     units: 1,
-    price: '' as string | number,
-    stop: '' as string | number,
-    notional_value: '' as string | number,
+    price: '',
+    stop: '',
+    notional_value: '',
   });
 
   const [placeCheckedWaitConfirm, setPlaceCheckedWaitConfirm] = useState(true);
   const [cancelBrokerageOrderId, setCancelBrokerageOrderId] = useState('');
 
-  // Load credentials from localStorage on mount
+  // Load credentials on mount
   useEffect(() => {
     const storedUserId = localStorage.getItem('snaptrade_userId') || '';
     const storedUserSecret = localStorage.getItem('snaptrade_userSecret') || '';
@@ -161,7 +157,6 @@ export default function BrokerPage() {
   }, [router]);
 
   const fetchAccounts = useCallback(async () => {
-    // You may want to add loading state here if needed
     try {
       const res = await axios.post<{ accounts: Account[] }>(
         'https://snaptrade-trial.onrender.com/api/snaptrade/get-accounts',
@@ -170,16 +165,15 @@ export default function BrokerPage() {
           userSecret,
         }
       );
-      const accountsData: Account[] = res.data.accounts || [];
+      const accountsData = res.data.accounts || [];
       setAccounts(accountsData);
-      setSelectedAccountId(accountsData.length > 0 ? accountsData[0].id : '');
-    } catch (e: unknown) {
-      alert(getErrorMessage(e) || 'Failed to load accounts');
+      setSelectedAccountId(accountsData.length ? accountsData[0].id : '');
+    } catch (error: unknown) {
+      alert(getErrorMessage(error));
       setSelectedAccountId('');
     }
   }, [userId, userSecret]);
 
-  // Fetch accounts once userId and secret available
   useEffect(() => {
     if (userId && userSecret) {
       fetchAccounts();
@@ -201,8 +195,8 @@ export default function BrokerPage() {
         }
       );
       setHoldings(res.data);
-    } catch (e: unknown) {
-      alert(getErrorMessage(e) || 'Failed to load holdings');
+    } catch (error: unknown) {
+      alert(getErrorMessage(error));
     }
   };
 
@@ -223,12 +217,12 @@ export default function BrokerPage() {
         }
       );
       setTransactions(res.data.transactions);
-    } catch (e: unknown) {
-      alert(getErrorMessage(e) || 'Failed to load transactions');
+    } catch (error: unknown) {
+      alert(getErrorMessage(error));
     }
   };
 
-  // Symbol search effect with debounce
+  // Symbol search with debounce
   useEffect(() => {
     if (symbolSearchTerm.length < 2) {
       setSymbolResults([]);
@@ -265,8 +259,8 @@ export default function BrokerPage() {
           universal_symbol_id: sym.id,
         }));
         setSymbolResults(formattedSymbols);
-      } catch (e: unknown) {
-        setSearchError(getErrorMessage(e) || 'Failed to search symbols');
+      } catch (error: unknown) {
+        setSearchError(getErrorMessage(error));
         setSymbolResults([]);
       } finally {
         setSearchLoading(false);
@@ -318,8 +312,8 @@ export default function BrokerPage() {
       );
       setTradeId(res.data.data.trade.id);
       setLastOrderResponse(res.data);
-    } catch (e: unknown) {
-      alert('Failed to check order impact: ' + getErrorMessage(e));
+    } catch (error: unknown) {
+      alert('Failed to check order impact: ' + getErrorMessage(error));
     }
   };
 
@@ -341,8 +335,8 @@ export default function BrokerPage() {
       );
       alert('Order placed successfully. Brokerage Order ID: ' + res.data.data.brokerage_order_id);
       setLastOrderResponse(res.data);
-    } catch (e: unknown) {
-      alert('Failed to place checked order: ' + getErrorMessage(e));
+    } catch (error: unknown) {
+      alert('Failed to place checked order: ' + getErrorMessage(error));
     }
   };
 
@@ -373,8 +367,8 @@ export default function BrokerPage() {
       );
       alert('Force order placed successfully. Brokerage Order ID: ' + res.data.data.brokerage_order_id);
       setLastOrderResponse(res.data);
-    } catch (e: unknown) {
-      alert('Failed to place order: ' + getErrorMessage(e));
+    } catch (error: unknown) {
+      alert('Failed to place order: ' + getErrorMessage(error));
     }
   };
 
@@ -400,8 +394,8 @@ export default function BrokerPage() {
       );
       alert('Cancel request sent. Status: ' + res.data.data.status);
       setLastOrderResponse(res.data);
-    } catch (e: unknown) {
-      alert('Failed to cancel order: ' + getErrorMessage(e));
+    } catch (error: unknown) {
+      alert('Failed to cancel order: ' + getErrorMessage(error));
     }
   };
 
@@ -419,7 +413,6 @@ export default function BrokerPage() {
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <h1 className="text-3xl font-semibold mb-4">Brokerage Details</h1>
 
-      {/* Accounts Select */}
       <div>
         <label htmlFor="accountSelect" className="font-semibold">
           Select Account:
@@ -453,7 +446,6 @@ export default function BrokerPage() {
         </button>
       </div>
 
-      {/* Holdings */}
       {holdings && (
         <section className="border p-4 rounded bg-gray-50">
           <h2 className="text-xl font-semibold mb-2">Holdings for {holdings.account.name}</h2>
@@ -488,7 +480,6 @@ export default function BrokerPage() {
         </section>
       )}
 
-      {/* Transactions */}
       {transactions.length > 0 && (
         <section className="border p-4 rounded bg-gray-50">
           <h2 className="text-xl font-semibold mb-2">Transactions</h2>
@@ -503,11 +494,9 @@ export default function BrokerPage() {
         </section>
       )}
 
-      {/* Trading Forms */}
       <section className="border p-4 rounded bg-white shadow max-w-xl mx-auto">
         <h2 className="text-2xl font-semibold mb-4">Trading</h2>
 
-        {/* Symbol Search */}
         <div className="mb-4">
           <label htmlFor="symbolSearch" className="font-semibold block mb-1">
             Search Symbol
@@ -529,7 +518,10 @@ export default function BrokerPage() {
                   key={sym.universal_symbol_id}
                   className="p-2 hover:bg-blue-100 cursor-pointer"
                   onClick={() => {
-                    setOrderForm((prev) => ({ ...prev, universal_symbol_id: sym.universal_symbol_id }));
+                    setOrderForm((prev) => ({
+                      ...prev,
+                      universal_symbol_id: sym.universal_symbol_id,
+                    }));
                     setSymbolSearchTerm(sym.symbol);
                     setSymbolResults([]);
                   }}
@@ -541,7 +533,6 @@ export default function BrokerPage() {
           )}
         </div>
 
-        {/* Check Order Impact */}
         <form onSubmit={checkOrderImpact} className="mb-6 space-y-2">
           <h3 className="font-semibold">Check Order Impact</h3>
           <div className="grid grid-cols-2 gap-2">
@@ -636,15 +627,11 @@ export default function BrokerPage() {
             />
           </div>
 
-          <button
-            type="submit"
-            className="bg-blue-600 text-white py-2 rounded w-full hover:bg-blue-700"
-          >
+          <button type="submit" className="bg-blue-600 text-white py-2 rounded w-full hover:bg-blue-700">
             Check Impact
           </button>
         </form>
 
-        {/* Place Checked Order */}
         <form onSubmit={placeCheckedOrder} className="mb-6 space-y-2">
           <h3 className="font-semibold">Place Checked Order</h3>
           <input
@@ -663,26 +650,18 @@ export default function BrokerPage() {
             />
             <span>Wait to Confirm</span>
           </label>
-          <button
-            type="submit"
-            className="bg-green-600 text-white py-2 rounded w-full hover:bg-green-700"
-          >
+          <button type="submit" className="bg-green-600 text-white py-2 rounded w-full hover:bg-green-700">
             Place Checked Order
           </button>
         </form>
 
-        {/* Place Order without check */}
         <form onSubmit={placeOrder} className="mb-6 space-y-2">
           <h3 className="font-semibold">Place Order (Without Impact Check)</h3>
-          <button
-            type="submit"
-            className="bg-purple-600 text-white py-2 rounded w-full hover:bg-purple-700"
-          >
+          <button type="submit" className="bg-purple-600 text-white py-2 rounded w-full hover:bg-purple-700">
             Place Order
           </button>
         </form>
 
-        {/* Cancel Order */}
         <form onSubmit={cancelOrder} className="space-y-2">
           <h3 className="font-semibold">Cancel Order</h3>
           <input
@@ -698,7 +677,6 @@ export default function BrokerPage() {
           </button>
         </form>
 
-        {/* Last Order Response */}
         {lastOrderResponse && (
           <pre className="mt-4 p-2 whitespace-pre-wrap border rounded bg-gray-100 max-h-64 overflow-y-auto text-xs">
             {JSON.stringify(lastOrderResponse, null, 2)}

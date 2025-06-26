@@ -1,4 +1,5 @@
 'use client';
+
 import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import Link from 'next/link';
@@ -13,13 +14,13 @@ interface Connection {
 function getErrorMessage(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
     if ('response' in e) {
-      const errResp = (e as any).response;
-      if (errResp && errResp.data && typeof errResp.data.error === 'string') {
-        return errResp.data.error;
+      const res = (e as { response?: { data?: { error?: string } } }).response;
+      if (res?.data?.error) {
+        return res.data.error;
       }
     }
-    if ('message' in e && typeof (e as any).message === 'string') {
-      return (e as any).message;
+    if ('message' in e && typeof (e as { message?: string }).message === 'string') {
+      return (e as { message: string }).message;
     }
   }
   return 'Unknown error occurred';
@@ -36,7 +37,7 @@ export default function HomePage() {
   const [connectionsError, setConnectionsError] = useState('');
   const [credentialsSubmitted, setCredentialsSubmitted] = useState(false);
 
-  // On mount, try to load credentials
+  // Load credentials on mount
   useEffect(() => {
     const storedUserId = localStorage.getItem('snaptrade_userId');
     const storedUserSecret = localStorage.getItem('snaptrade_userSecret');
@@ -60,14 +61,14 @@ export default function HomePage() {
       );
       setConnections(res.data.connections || []);
       setConnectionsError('');
-    } catch (e: unknown) {
-      setConnectionsError(getErrorMessage(e) || 'Failed to load connections');
+    } catch (error: unknown) {
+      setConnectionsError(getErrorMessage(error));
+      setConnections([]);
     } finally {
       setLoadingConnections(false);
     }
   }, []);
 
-  // Fetch connections after credentials submitted
   useEffect(() => {
     if (credentialsSubmitted && userId && userSecret) {
       fetchConnections(userId, userSecret);
@@ -91,6 +92,7 @@ export default function HomePage() {
         userSecret,
         broker: brokerInput.toUpperCase(),
       });
+
       const { connectionStatus, userSecret: newUserSecret } = res.data;
       if (newUserSecret && newUserSecret !== userSecret) {
         setUserSecret(newUserSecret);
@@ -101,10 +103,12 @@ export default function HomePage() {
         window.location.href = connectionStatus.redirectURI;
         return;
       }
+
       setConnectMessage('Broker connection initiated successfully.');
+
       fetchConnections(userId, newUserSecret || userSecret);
-    } catch (e: unknown) {
-      setConnectMessage(getErrorMessage(e) || 'Error connecting broker');
+    } catch (error: unknown) {
+      setConnectMessage(getErrorMessage(error));
     } finally {
       setConnectLoading(false);
     }
@@ -189,7 +193,10 @@ export default function HomePage() {
             )}
             <ul className="space-y-4">
               {connections.map((conn) => (
-                <li key={conn.id} className="border p-4 rounded flex items-center justify-between">
+                <li
+                  key={conn.id}
+                  className="border p-4 rounded flex items-center justify-between"
+                >
                   <div className="flex items-center space-x-4">
                     {conn.logoUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
