@@ -125,7 +125,7 @@ export default function BrokerPage() {
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:4000/api/snaptrade/get-accounts', {
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/get-accounts', {
         userId,
         userSecret,
       });
@@ -150,7 +150,7 @@ export default function BrokerPage() {
     if (!selectedAccountId) return alert('Select an account');
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:4000/api/snaptrade/get-account-holdings', {
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/get-account-holdings', {
         userId,
         userSecret,
         accountId: selectedAccountId,
@@ -169,7 +169,7 @@ export default function BrokerPage() {
     if (!selectedAccountId) return alert('Select an account');
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:4000/api/snaptrade/get-transactions', {
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/get-transactions', {
         userId,
         userSecret,
         accountId: selectedAccountId,
@@ -209,7 +209,7 @@ export default function BrokerPage() {
       setSearchLoading(true);
       setSearchError('');
       try {
-        const res = await axios.post('http://localhost:4000/api/snaptrade/search-acc-symbols', {
+        const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/search-acc-symbols', {
           userId,
           userSecret,
           accountId: selectedAccountId,
@@ -263,7 +263,7 @@ export default function BrokerPage() {
         units: orderForm.units,
         notional_value: orderForm.notional_value === '' ? undefined : orderForm.notional_value,
       };
-      const res = await axios.post('http://localhost:4000/api/snaptrade/impact', payload);
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/impact', payload);
       alert(
         `Order Impact Check Successful\nTrade ID: ${res.data.data.trade.id}\nRemaining Cash: ${res.data.data.trade_impacts?.[0]?.remaining_cash}`
       );
@@ -278,7 +278,7 @@ export default function BrokerPage() {
     e.preventDefault();
     if (!tradeId) return alert('No tradeId. Please check order impact first.');
     try {
-      const res = await axios.post('http://localhost:4000/api/snaptrade/place-checked-order', {
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/place-checked-order', {
         userId,
         userSecret,
         tradeId,
@@ -309,7 +309,7 @@ export default function BrokerPage() {
         units: orderForm.units,
         notional_value: orderForm.notional_value === '' ? undefined : orderForm.notional_value,
       };
-      const res = await axios.post('http://localhost:4000/api/snaptrade/place-order', payload);
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/place-order', payload);
       alert('Force order placed successfully. Brokerage Order ID: ' + res.data.data.brokerage_order_id);
       setLastOrderResponse(res.data.data);
     } catch (e: any) {
@@ -322,7 +322,7 @@ export default function BrokerPage() {
     if (!selectedAccountId) return alert('Select an account');
     if (!cancelBrokerageOrderId.trim()) return alert('Enter brokerage order ID to cancel');
     try {
-      const res = await axios.post('http://localhost:4000/api/snaptrade/cancel-order', {
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/cancel-order', {
         userId,
         userSecret,
         accountId: selectedAccountId,

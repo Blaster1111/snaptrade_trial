@@ -50,7 +50,7 @@ export default function HomePage() {
     setLoadingConnections(true);
     setConnectionsError('');
     try {
-      const res = await axios.post('http://localhost:4000/api/snaptrade/get-connections', {
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/get-connections', {
         userId: uid,
         userSecret: secret,
       });
@@ -72,7 +72,7 @@ export default function HomePage() {
     setConnectLoading(true);
     setConnectMessage('');
     try {
-      const res = await axios.post('http://localhost:4000/api/snaptrade/connect-broker', {
+      const res = await axios.post('https://snaptrade-trial.onrender.com/api/snaptrade/connect-broker', {
         userId,
         userSecret,
         broker: brokerInput.toUpperCase(),
