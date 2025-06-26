@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import Link from 'next/link';
 
@@ -12,7 +12,6 @@ interface Connection {
 
 function getErrorMessage(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
-    // For axios error structure
     if ('response' in e) {
       const errResp = (e as any).response;
       if (errResp && errResp.data && typeof errResp.data.error === 'string') {
@@ -48,14 +47,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // Fetch connections after credentials submitted
-  useEffect(() => {
-    if (credentialsSubmitted && userId && userSecret) {
-      fetchConnections(userId, userSecret);
-    }
-  }, [credentialsSubmitted, userId, userSecret]);
-
-  const fetchConnections = async (uid: string, secret: string) => {
+  const fetchConnections = useCallback(async (uid: string, secret: string) => {
     setLoadingConnections(true);
     setConnectionsError('');
     try {
@@ -73,7 +65,14 @@ export default function HomePage() {
     } finally {
       setLoadingConnections(false);
     }
-  };
+  }, []);
+
+  // Fetch connections after credentials submitted
+  useEffect(() => {
+    if (credentialsSubmitted && userId && userSecret) {
+      fetchConnections(userId, userSecret);
+    }
+  }, [credentialsSubmitted, userId, userSecret, fetchConnections]);
 
   const handleConnectBroker = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,6 +124,7 @@ export default function HomePage() {
   return (
     <main className="max-w-3xl mx-auto p-6 space-y-10">
       <h1 className="text-3xl font-bold mb-6 text-center">SnapTrade Dashboard</h1>
+
       {!credentialsSubmitted && (
         <section className="max-w-md mx-auto">
           <h2 className="text-xl font-semibold mb-4">Enter SnapTrade Credentials</h2>
@@ -189,12 +189,10 @@ export default function HomePage() {
             )}
             <ul className="space-y-4">
               {connections.map((conn) => (
-                <li
-                  key={conn.id}
-                  className="border p-4 rounded flex items-center justify-between"
-                >
+                <li key={conn.id} className="border p-4 rounded flex items-center justify-between">
                   <div className="flex items-center space-x-4">
                     {conn.logoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={conn.logoUrl}
                         alt={conn.brokerName}
@@ -204,10 +202,7 @@ export default function HomePage() {
                     <span className="font-semibold">{conn.brokerName}</span>
                     {conn.disabled && <span className="text-sm text-red-600">(Disabled)</span>}
                   </div>
-                  <Link
-                    href={`/broker/${conn.id}`}
-                    className="text-blue-600 hover:underline"
-                  >
+                  <Link href={`/broker/${conn.id}`} className="text-blue-600 hover:underline">
                     View Accounts
                   </Link>
                 </li>

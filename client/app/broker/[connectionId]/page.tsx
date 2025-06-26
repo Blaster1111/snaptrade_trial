@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
 
@@ -95,6 +95,7 @@ function getErrorMessage(e: unknown): string {
 export default function BrokerPage() {
   const params = useParams();
   const router = useRouter();
+  // connectionId is received but currently not used. We leave it here if you need for future extension.
   const connectionId = params?.connectionId || '';
 
   const [userId, setUserId] = useState<string>('');
@@ -103,23 +104,24 @@ export default function BrokerPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [holdings, setHoldings] = useState<Holding | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  // No longer needed - you can remove error and loading states if unused elsewhere
+  // const [loading, setLoading] = useState(false);
+  // const [error, setError] = useState('');
+
   const [tradeId, setTradeId] = useState<string>('');
   const [lastOrderResponse, setLastOrderResponse] = useState<OrderResponse | null>(null);
 
-  // Symbol search states and types
   interface SymbolResult {
     symbol: string;
     description: string;
     universal_symbol_id: string;
   }
+
   const [symbolSearchTerm, setSymbolSearchTerm] = useState('');
   const [symbolResults, setSymbolResults] = useState<SymbolResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
 
-  // orderForm type:
   interface OrderForm {
     action: 'BUY' | 'SELL';
     universal_symbol_id: string;
@@ -130,6 +132,7 @@ export default function BrokerPage() {
     stop: number | string;
     notional_value: number | string;
   }
+
   const [orderForm, setOrderForm] = useState<OrderForm>({
     action: 'BUY',
     universal_symbol_id: '',
@@ -157,15 +160,8 @@ export default function BrokerPage() {
     setUserSecret(storedUserSecret);
   }, [router]);
 
-  // Fetch accounts once userId and secret available
-  useEffect(() => {
-    if (userId && userSecret) {
-      fetchAccounts();
-    }
-  }, [userId, userSecret]);
-
-  const fetchAccounts = async () => {
-    setLoading(true);
+  const fetchAccounts = useCallback(async () => {
+    // You may want to add loading state here if needed
     try {
       const res = await axios.post<{ accounts: Account[] }>(
         'https://snaptrade-trial.onrender.com/api/snaptrade/get-accounts',
@@ -177,21 +173,24 @@ export default function BrokerPage() {
       const accountsData: Account[] = res.data.accounts || [];
       setAccounts(accountsData);
       setSelectedAccountId(accountsData.length > 0 ? accountsData[0].id : '');
-      setError('');
     } catch (e: unknown) {
-      setError(getErrorMessage(e) || 'Failed to load accounts');
+      alert(getErrorMessage(e) || 'Failed to load accounts');
       setSelectedAccountId('');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [userId, userSecret]);
+
+  // Fetch accounts once userId and secret available
+  useEffect(() => {
+    if (userId && userSecret) {
+      fetchAccounts();
+    }
+  }, [userId, userSecret, fetchAccounts]);
 
   const fetchHoldings = async () => {
     if (!selectedAccountId) {
       alert('Select an account');
       return;
     }
-    setLoading(true);
     try {
       const res = await axios.post<Holding>(
         'https://snaptrade-trial.onrender.com/api/snaptrade/get-account-holdings',
@@ -202,11 +201,8 @@ export default function BrokerPage() {
         }
       );
       setHoldings(res.data);
-      setError('');
     } catch (e: unknown) {
-      setError(getErrorMessage(e) || 'Failed to load holdings');
-    } finally {
-      setLoading(false);
+      alert(getErrorMessage(e) || 'Failed to load holdings');
     }
   };
 
@@ -215,7 +211,6 @@ export default function BrokerPage() {
       alert('Select an account');
       return;
     }
-    setLoading(true);
     try {
       const res = await axios.post<{ transactions: Transaction[] }>(
         'https://snaptrade-trial.onrender.com/api/snaptrade/get-transactions',
@@ -228,11 +223,8 @@ export default function BrokerPage() {
         }
       );
       setTransactions(res.data.transactions);
-      setError('');
     } catch (e: unknown) {
-      setError(getErrorMessage(e) || 'Failed to load transactions');
-    } finally {
-      setLoading(false);
+      alert(getErrorMessage(e) || 'Failed to load transactions');
     }
   };
 
@@ -253,19 +245,19 @@ export default function BrokerPage() {
       setSymbolResults([]);
       return;
     }
+
     const handler = setTimeout(async () => {
       setSearchLoading(true);
       setSearchError('');
       try {
-        const res = await axios.post<{ symbols: Array<{ symbol: string; description?: string; name?: string; id: string }> }>(
-          'https://snaptrade-trial.onrender.com/api/snaptrade/search-acc-symbols',
-          {
-            userId,
-            userSecret,
-            accountId: selectedAccountId,
-            substring: symbolSearchTerm,
-          }
-        );
+        const res = await axios.post<{
+          symbols: Array<{ symbol: string; description?: string; name?: string; id: string }>;
+        }>('https://snaptrade-trial.onrender.com/api/snaptrade/search-acc-symbols', {
+          userId,
+          userSecret,
+          accountId: selectedAccountId,
+          substring: symbolSearchTerm,
+        });
         const symbols = res.data.symbols || [];
         const formattedSymbols: SymbolResult[] = symbols.map((sym) => ({
           symbol: sym.symbol,
@@ -426,6 +418,7 @@ export default function BrokerPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <h1 className="text-3xl font-semibold mb-4">Brokerage Details</h1>
+
       {/* Accounts Select */}
       <div>
         <label htmlFor="accountSelect" className="font-semibold">
@@ -503,8 +496,7 @@ export default function BrokerPage() {
             {transactions.map((tx) => (
               <li key={tx.id} className="border-b py-1">
                 <strong>{tx.description}</strong> ({tx.type}) — Symbol: {tx.symbol} — Amount:{' '}
-                {tx.amount} {tx.currency} — Trade Date:{' '}
-                {new Date(tx.tradeDate).toLocaleDateString()}
+                {tx.amount} {tx.currency} — Trade Date: {new Date(tx.tradeDate).toLocaleDateString()}
               </li>
             ))}
           </ul>
@@ -537,10 +529,7 @@ export default function BrokerPage() {
                   key={sym.universal_symbol_id}
                   className="p-2 hover:bg-blue-100 cursor-pointer"
                   onClick={() => {
-                    setOrderForm((prev) => ({
-                      ...prev,
-                      universal_symbol_id: sym.universal_symbol_id,
-                    }));
+                    setOrderForm((prev) => ({ ...prev, universal_symbol_id: sym.universal_symbol_id }));
                     setSymbolSearchTerm(sym.symbol);
                     setSymbolResults([]);
                   }}
@@ -566,6 +555,7 @@ export default function BrokerPage() {
               <option value="BUY">Buy</option>
               <option value="SELL">Sell</option>
             </select>
+
             <input
               required
               name="universal_symbol_id"
@@ -574,6 +564,7 @@ export default function BrokerPage() {
               onChange={onOrderInputChange}
               className="border p-1 rounded"
             />
+
             <select
               required
               name="order_type"
@@ -586,6 +577,7 @@ export default function BrokerPage() {
               <option value="Stop">Stop</option>
               <option value="StopLimit">StopLimit</option>
             </select>
+
             <select
               required
               name="time_in_force"
@@ -598,6 +590,7 @@ export default function BrokerPage() {
               <option value="FOK">Fill Or Kill</option>
               <option value="IOC">Immediate Or Cancel</option>
             </select>
+
             <input
               type="number"
               step="any"
@@ -608,6 +601,7 @@ export default function BrokerPage() {
               onChange={onOrderInputChange}
               className="border p-1 rounded"
             />
+
             <input
               type="number"
               step="any"
@@ -618,6 +612,7 @@ export default function BrokerPage() {
               onChange={onOrderInputChange}
               className="border p-1 rounded"
             />
+
             <input
               type="number"
               step="any"
@@ -628,6 +623,7 @@ export default function BrokerPage() {
               onChange={onOrderInputChange}
               className="border p-1 rounded"
             />
+
             <input
               type="number"
               step="any"
@@ -639,7 +635,11 @@ export default function BrokerPage() {
               className="border p-1 rounded"
             />
           </div>
-          <button type="submit" className="bg-blue-600 text-white py-2 rounded w-full hover:bg-blue-700">
+
+          <button
+            type="submit"
+            className="bg-blue-600 text-white py-2 rounded w-full hover:bg-blue-700"
+          >
             Check Impact
           </button>
         </form>
@@ -663,7 +663,10 @@ export default function BrokerPage() {
             />
             <span>Wait to Confirm</span>
           </label>
-          <button type="submit" className="bg-green-600 text-white py-2 rounded w-full hover:bg-green-700">
+          <button
+            type="submit"
+            className="bg-green-600 text-white py-2 rounded w-full hover:bg-green-700"
+          >
             Place Checked Order
           </button>
         </form>
@@ -671,7 +674,10 @@ export default function BrokerPage() {
         {/* Place Order without check */}
         <form onSubmit={placeOrder} className="mb-6 space-y-2">
           <h3 className="font-semibold">Place Order (Without Impact Check)</h3>
-          <button type="submit" className="bg-purple-600 text-white py-2 rounded w-full hover:bg-purple-700">
+          <button
+            type="submit"
+            className="bg-purple-600 text-white py-2 rounded w-full hover:bg-purple-700"
+          >
             Place Order
           </button>
         </form>
